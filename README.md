@@ -57,3 +57,19 @@ python3 merge_timeline_data.py --base-dir timeline_data
 Merging rules:
 - Daily merged visits include a `source` field (e.g., `vivaldi` or `chrome`).
 - Aggregate/LLM merged summaries do not track per-URL sources.
+
+## Chart Script
+```bash
+python3 plot_timeline_data.py --base-dir timeline_data --source merge
+```
+
+Outputs charts to `timeline_data/<source>/charts`:
+- `top_domains.png`
+- `top_urls.png`
+- `hourly.png`
+- `weekday.png`
+- `heatmap.png`
+- `daily_trend.png`
+
+Timezone note:
+- Charts use America/Chicago for hour/day bucketing.
