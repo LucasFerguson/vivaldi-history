@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import platform
 import shutil
 import sqlite3
 import sys
@@ -23,6 +24,75 @@ from urllib.parse import parse_qs, urlparse
 
 DEFAULT_VIVALDI_DB_PATH = "/mnt/c/Users/lucas/AppData/Local/Vivaldi/User Data/Default/History"
 DEFAULT_CHROME_DB_PATH = "/mnt/c/Users/lucas/AppData/Local/Google/Chrome/User Data/Default/History"
+
+
+def candidate_db_paths(browser: str) -> List[str]:
+    browser_dir = "Vivaldi" if browser == "vivaldi" else "Google/Chrome"
+
+    candidates: List[str] = []
+
+    # Windows native paths
+    local_appdata = os.environ.get("LOCALAPPDATA")
+    userprofile = os.environ.get("USERPROFILE")
+    if local_appdata:
+        candidates.append(
+            os.path.join(local_appdata, browser_dir, "User Data", "Default", "History")
+        )
+    if userprofile:
+        candidates.append(
+            os.path.join(
+                userprofile,
+                "AppData",
+                "Local",
+                browser_dir,
+                "User Data",
+                "Default",
+                "History",
+            )
+        )
+
+    # WSL paths (/mnt/c/Users/<user>/AppData/Local/...)
+    wsl_home = os.environ.get("WSL_DISTRO_NAME")
+    if wsl_home or platform.system().lower() == "linux":
+        # Try current $USER and common Windows user roots
+        linux_user = os.environ.get("USER") or ""
+        if linux_user:
+            candidates.append(
+                f"/mnt/c/Users/{linux_user}/AppData/Local/{browser_dir}/User Data/Default/History"
+            )
+        candidates.extend(
+            [
+                f"/mnt/c/Users/{u}/AppData/Local/{browser_dir}/User Data/Default/History"
+                for u in ["lucas", "User", "Public"]
+            ]
+        )
+
+    # Fallbacks to existing defaults
+    if browser == "vivaldi":
+        candidates.append(DEFAULT_VIVALDI_DB_PATH)
+    else:
+        candidates.append(DEFAULT_CHROME_DB_PATH)
+
+    # Deduplicate while preserving order
+    seen = set()
+    unique = []
+    for c in candidates:
+        if c not in seen:
+            seen.add(c)
+            unique.append(c)
+    return unique
+
+
+def find_history_db(browser: str) -> Tuple[str | None, List[str]]:
+    log(f"Looking for {browser} History database...")
+    tried = []
+    for path in candidate_db_paths(browser):
+        tried.append(path)
+        if os.path.exists(path):
+            log(f"Found History database at: {path}")
+            return path, tried
+    log("History database not found in common locations.")
+    return None, tried
 DEFAULT_OUTPUT_DIR = "timeline_data"
 TMP_DB_COPY = "/tmp/History_copy"
 
@@ -361,16 +431,17 @@ def main(argv: List[str]) -> int:
 
     if args.db_path:
         db_path = args.db_path
+        if not os.path.exists(db_path):
+            log(f"History database not found: {db_path}")
+            return 2
     else:
-        db_path = (
-            DEFAULT_VIVALDI_DB_PATH
-            if args.browser == "vivaldi"
-            else DEFAULT_CHROME_DB_PATH
-        )
-
-    if not os.path.exists(db_path):
-        log(f"History database not found: {db_path}")
-        return 2
+        db_path, tried = find_history_db(args.browser)
+        if not db_path:
+            log("Tried the following locations:")
+            for path in tried:
+                log(f"  - {path}")
+            log("Use --db-path to specify the exact History file.")
+            return 2
 
     output_dir = base_output_dir / args.browser
     output_dir.mkdir(parents=True, exist_ok=True)
