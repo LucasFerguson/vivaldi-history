@@ -21,7 +21,8 @@ from typing import Any, Dict, Iterable, List, Tuple
 from urllib.parse import parse_qs, urlparse
 
 
-DEFAULT_DB_PATH = "/mnt/c/Users/lucas/AppData/Local/Vivaldi/User Data/Default/History"
+DEFAULT_VIVALDI_DB_PATH = "/mnt/c/Users/lucas/AppData/Local/Vivaldi/User Data/Default/History"
+DEFAULT_CHROME_DB_PATH = "/mnt/c/Users/lucas/AppData/Local/Google/Chrome/User Data/Default/History"
 DEFAULT_OUTPUT_DIR = "timeline_data"
 TMP_DB_COPY = "/tmp/History_copy"
 
@@ -336,8 +337,14 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
         help="Output directory for timeline data.",
     )
     p.add_argument(
+        "--browser",
+        choices=["vivaldi", "chrome"],
+        default="vivaldi",
+        help="Browser profile to use for default History DB path.",
+    )
+    p.add_argument(
         "--db-path",
-        default=DEFAULT_DB_PATH,
+        default=None,
         help="Path to Vivaldi History SQLite database.",
     )
     return p.parse_args(argv)
@@ -346,16 +353,26 @@ def parse_args(argv: List[str]) -> argparse.Namespace:
 def main(argv: List[str]) -> int:
     args = parse_args(argv)
     weeks = args.weeks
-    output_dir = Path(args.output_dir)
+    base_output_dir = Path(args.output_dir)
 
     if weeks <= 0:
         log("Weeks must be a positive integer.")
         return 2
 
-    if not os.path.exists(args.db_path):
-        log(f"History database not found: {args.db_path}")
+    if args.db_path:
+        db_path = args.db_path
+    else:
+        db_path = (
+            DEFAULT_VIVALDI_DB_PATH
+            if args.browser == "vivaldi"
+            else DEFAULT_CHROME_DB_PATH
+        )
+
+    if not os.path.exists(db_path):
+        log(f"History database not found: {db_path}")
         return 2
 
+    output_dir = base_output_dir / args.browser
     output_dir.mkdir(parents=True, exist_ok=True)
     daily_dir = output_dir / "daily"
     daily_dir.mkdir(parents=True, exist_ok=True)
@@ -364,7 +381,7 @@ def main(argv: List[str]) -> int:
     period_start = period_end - timedelta(weeks=weeks)
     since_chrome_ts = datetime_to_chrome_time(period_start)
 
-    copy_database(args.db_path, TMP_DB_COPY)
+    copy_database(db_path, TMP_DB_COPY)
 
     rows, url_cols, visit_cols = query_history(TMP_DB_COPY, since_chrome_ts)
     records = build_records(rows, url_cols, visit_cols)
