@@ -2,6 +2,9 @@
 
 Exports Vivaldi (Chromium) history into daily JSON files plus aggregate views for analysis and LLM input.
 
+Example Heatmap Output:
+![alt text](heatmap.png)
+
 ## Requirements
 - Python 3.8+
 - Vivaldi or Chrome history DB at:

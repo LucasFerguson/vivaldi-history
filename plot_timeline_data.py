@@ -77,11 +77,11 @@ def plot_bar(values: List[Tuple[str, int]], title: str, out_path: Path) -> None:
     plt.close()
 
 
-def plot_hourly(hourly: List[int], out_path: Path) -> None:
+def plot_hourly(hourly: List[int], out_path: Path, period_label: str) -> None:
     plt.figure(figsize=(10, 5))
     plt.bar(list(range(24)), hourly)
     plt.xticks(list(range(24)))
-    plt.title("Hourly Activity")
+    plt.title(f"Hourly Activity ({period_label})")
     plt.xlabel(f"Hour of Day ({LOCAL_TZ.key})")
     plt.ylabel("Visits")
     plt.tight_layout()
@@ -89,12 +89,12 @@ def plot_hourly(hourly: List[int], out_path: Path) -> None:
     plt.close()
 
 
-def plot_weekday(weekday: Dict[str, int], out_path: Path) -> None:
+def plot_weekday(weekday: Dict[str, int], out_path: Path, period_label: str) -> None:
     order = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
     counts = [weekday.get(d, 0) for d in order]
     plt.figure(figsize=(8, 4))
     plt.bar(order, counts)
-    plt.title("Day-of-Week Activity")
+    plt.title(f"Day-of-Week Activity ({period_label})")
     plt.xlabel(f"Day ({LOCAL_TZ.key})")
     plt.ylabel("Visits")
     plt.tight_layout()
@@ -102,7 +102,7 @@ def plot_weekday(weekday: Dict[str, int], out_path: Path) -> None:
     plt.close()
 
 
-def plot_heatmap(visits: List[Dict[str, Any]], out_path: Path) -> None:
+def plot_heatmap(visits: List[Dict[str, Any]], out_path: Path, period_label: str) -> None:
     # Build date x hour matrix.
     by_date_hour = defaultdict(lambda: [0] * 24)
     dates = set()
@@ -128,7 +128,7 @@ def plot_heatmap(visits: List[Dict[str, Any]], out_path: Path) -> None:
     plt.colorbar(label="Visits (scaled)")
     plt.yticks(range(len(date_list)), date_list)
     plt.xticks(range(24), range(24))
-    plt.title(f"Activity Heatmap (Date x Hour, {LOCAL_TZ.key})")
+    plt.title(f"Activity Heatmap (Date x Hour, {LOCAL_TZ.key}, {period_label})")
     plt.xlabel(f"Hour of Day ({LOCAL_TZ.key})")
     plt.ylabel("Date")
     plt.tight_layout()
@@ -136,7 +136,7 @@ def plot_heatmap(visits: List[Dict[str, Any]], out_path: Path) -> None:
     plt.close()
 
 
-def plot_daily_trend(visits: List[Dict[str, Any]], out_path: Path) -> None:
+def plot_daily_trend(visits: List[Dict[str, Any]], out_path: Path, period_label: str) -> None:
     counts = Counter()
     for v in visits:
         ts = v.get("timestamp")
@@ -152,7 +152,7 @@ def plot_daily_trend(visits: List[Dict[str, Any]], out_path: Path) -> None:
     values = [counts[d] for d in dates]
     plt.figure(figsize=(12, 4))
     plt.plot(dates, values, marker="o", linewidth=1.5)
-    plt.title(f"Daily Visit Trend ({LOCAL_TZ.key})")
+    plt.title(f"Daily Visit Trend ({LOCAL_TZ.key}, {period_label})")
     plt.xlabel("Date")
     plt.ylabel("Visits")
     plt.xticks(rotation=45, ha="right")
@@ -183,11 +183,35 @@ def main(argv: List[str]) -> int:
 
     aggregate = load_json(aggregate_path) if aggregate_path.exists() else {}
 
+    # Build period label.
+    period_label = "unknown period"
+    if "period" in aggregate and aggregate["period"]:
+        period_label = aggregate["period"]
+    elif "periods" in aggregate and aggregate["periods"]:
+        # Merge view: use earliest start and latest end if possible.
+        try:
+            starts = []
+            ends = []
+            for p in aggregate["periods"]:
+                if not p:
+                    continue
+                start_s, end_s = [x.strip() for x in p.split("to")]
+                starts.append(start_s)
+                ends.append(end_s)
+            if starts and ends:
+                period_label = f"{min(starts)} to {max(ends)}"
+        except Exception:
+            pass
+    if period_label == "unknown period" and visits:
+        dates = sorted(parse_ts(v["timestamp"]).date().isoformat() for v in visits if v.get("timestamp"))
+        if dates:
+            period_label = f"{dates[0]} to {dates[-1]}"
+
     log("Plotting top domains...")
     top_domains = aggregate.get("top_domains", [])
     if top_domains:
         values = [(d["domain"], d["visit_count"]) for d in top_domains[: args.top_n]]
-        plot_bar(values, "Top Domains", charts_dir / "top_domains.png")
+        plot_bar(values, f"Top Domains ({period_label})", charts_dir / "top_domains.png")
 
     log("Plotting top URLs...")
     top_urls = aggregate.get("top_urls", [])
@@ -195,27 +219,27 @@ def main(argv: List[str]) -> int:
         values = [
             (u["url"], u["visit_count"]) for u in top_urls[: args.top_n]
         ]
-        plot_bar(values, "Top URLs", charts_dir / "top_urls.png")
+        plot_bar(values, f"Top URLs ({period_label})", charts_dir / "top_urls.png")
 
     log("Plotting hourly distribution...")
     if "hourly_distribution" in aggregate:
-        plot_hourly(aggregate["hourly_distribution"], charts_dir / "hourly.png")
+        plot_hourly(aggregate["hourly_distribution"], charts_dir / "hourly.png", period_label)
     else:
         hourly = Counter(parse_ts(v["timestamp"]).hour for v in visits if v.get("timestamp"))
-        plot_hourly([hourly.get(h, 0) for h in range(24)], charts_dir / "hourly.png")
+        plot_hourly([hourly.get(h, 0) for h in range(24)], charts_dir / "hourly.png", period_label)
 
     log("Plotting weekday distribution...")
     if "weekday_distribution" in aggregate:
-        plot_weekday(aggregate["weekday_distribution"], charts_dir / "weekday.png")
+        plot_weekday(aggregate["weekday_distribution"], charts_dir / "weekday.png", period_label)
     else:
         weekday = Counter(parse_ts(v["timestamp"]).strftime("%a") for v in visits if v.get("timestamp"))
-        plot_weekday(dict(weekday), charts_dir / "weekday.png")
+        plot_weekday(dict(weekday), charts_dir / "weekday.png", period_label)
 
     log("Plotting heatmap...")
-    plot_heatmap(visits, charts_dir / "heatmap.png")
+    plot_heatmap(visits, charts_dir / "heatmap.png", period_label)
 
     log("Plotting daily trend...")
-    plot_daily_trend(visits, charts_dir / "daily_trend.png")
+    plot_daily_trend(visits, charts_dir / "daily_trend.png", period_label)
 
     log(f"Charts written to {charts_dir}")
     return 0
