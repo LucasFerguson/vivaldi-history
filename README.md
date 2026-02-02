@@ -2,11 +2,15 @@
 
 Exports Vivaldi (Chromium) history into daily JSON files plus aggregate views for analysis and LLM input.
 
-Example Heatmap Output:
-![alt text](heatmap.png)
+## Example Graphs
+Example Heatmap, Daily Trend, and Weekday Output Output:
+![alt text](example_graphs/heatmap.png)
+![alt text](example_graphs/daily_trend.png)
+![alt text](example_graphs/weekday.png)
 
 ## Requirements
 - Python 3.8+
+- matplotlib (`pip install matplotlib`)
 - Vivaldi or Chrome history DB at:
   - Vivaldi: `/mnt/c/Users/lucas/AppData/Local/Vivaldi/User Data/Default/History`
   - Chrome: `/mnt/c/Users/lucas/AppData/Local/Google/Chrome/User Data/Default/History`
@@ -73,6 +77,17 @@ Outputs charts to `timeline_data/<source>/charts`:
 - `weekday.png`
 - `heatmap.png`
 - `daily_trend.png`
+
+## Example Images (Repo Root)
+Example Heatmap Output:
+![Activity Heatmap](heatmap.png)
+![Daily Trend](daily_trend.png)
+![Weekday Activity](weekday.png)
+
+## Run Script
+```bash
+bash run.sh
+```
 
 Timezone note:
 - Charts use America/Chicago for hour/day bucketing.
