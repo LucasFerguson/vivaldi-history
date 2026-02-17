@@ -161,6 +161,66 @@ def plot_daily_trend(visits: List[Dict[str, Any]], out_path: Path, period_label:
     plt.close()
 
 
+def build_daily_stats(visits: List[Dict[str, Any]]) -> List[Tuple[str, int, int]]:
+    stats: Dict[str, Dict[str, Any]] = {}
+    for v in visits:
+        ts = v.get("timestamp")
+        if not ts:
+            continue
+        dt = parse_ts(ts)
+        date = dt.date().isoformat()
+        entry = stats.setdefault(date, {"visits": 0, "urls": set()})
+        entry["visits"] += 1
+        url = v.get("url")
+        if url:
+            entry["urls"].add(url)
+    return [
+        (date, entry["visits"], len(entry["urls"]))
+        for date, entry in sorted(stats.items())
+    ]
+
+
+def plot_daily_unique_trend(
+    daily_stats: List[Tuple[str, int, int]],
+    out_path: Path,
+    period_label: str,
+) -> None:
+    if not daily_stats:
+        return
+    dates = [d for d, _, _ in daily_stats]
+    visits = [v for _, v, _ in daily_stats]
+    unique_urls = [u for _, _, u in daily_stats]
+    plt.figure(figsize=(12, 4))
+    plt.plot(dates, visits, marker="o", linewidth=1.2, label="Visits")
+    plt.plot(dates, unique_urls, marker="o", linewidth=1.2, label="Unique URLs")
+    plt.title(f"Daily Visits vs Unique URLs ({LOCAL_TZ.key}, {period_label})")
+    plt.xlabel("Date")
+    plt.ylabel("Count")
+    plt.xticks(rotation=45, ha="right")
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=140)
+    plt.close()
+
+
+def plot_source_share(
+    visits: List[Dict[str, Any]],
+    out_path: Path,
+    period_label: str,
+) -> None:
+    counts = Counter(v.get("source") for v in visits if v.get("source"))
+    if not counts:
+        return
+    labels = list(counts.keys())
+    values = [counts[l] for l in labels]
+    plt.figure(figsize=(6, 6))
+    plt.pie(values, labels=labels, autopct="%1.1f%%", startangle=90)
+    plt.title(f"Visit Share by Source ({period_label})")
+    plt.tight_layout()
+    plt.savefig(out_path, dpi=140)
+    plt.close()
+
+
 def main(argv: List[str]) -> int:
     args = parse_args(argv)
     base_dir = Path(args.base_dir)
@@ -235,11 +295,26 @@ def main(argv: List[str]) -> int:
         weekday = Counter(parse_ts(v["timestamp"]).strftime("%a") for v in visits if v.get("timestamp"))
         plot_weekday(dict(weekday), charts_dir / "weekday.png", period_label)
 
+    log("Plotting top search queries...")
+    top_queries = aggregate.get("top_search_queries", [])
+    if top_queries:
+        values = [
+            (q["query"], q["count"]) for q in top_queries[: args.top_n]
+        ]
+        plot_bar(values, f"Top Search Queries ({period_label})", charts_dir / "top_search_queries.png")
+
     log("Plotting heatmap...")
     plot_heatmap(visits, charts_dir / "heatmap.png", period_label)
 
     log("Plotting daily trend...")
     plot_daily_trend(visits, charts_dir / "daily_trend.png", period_label)
+
+    log("Plotting daily unique URL trend...")
+    daily_stats = build_daily_stats(visits)
+    plot_daily_unique_trend(daily_stats, charts_dir / "daily_unique_urls.png", period_label)
+
+    log("Plotting visit share by source...")
+    plot_source_share(visits, charts_dir / "source_share.png", period_label)
 
     log(f"Charts written to {charts_dir}")
     return 0

@@ -16,6 +16,9 @@ Example Heatmap, Daily Trend, and Weekday Output Output:
   - Chrome: `/mnt/c/Users/lucas/AppData/Local/Google/Chrome/User Data/Default/History`
 
 ## Usage
+
+`source ./venv/bin/activate.fish`
+
 ```bash
 python3 export_vivaldi_history.py --weeks 3 --browser vivaldi --output-dir timeline_data
 python3 export_vivaldi_history.py --weeks 3 --browser chrome --output-dir timeline_data
@@ -75,8 +78,11 @@ Outputs charts to `timeline_data/<source>/charts`:
 - `top_urls.png`
 - `hourly.png`
 - `weekday.png`
+- `top_search_queries.png`
 - `heatmap.png`
 - `daily_trend.png`
+- `daily_unique_urls.png`
+- `source_share.png`
 
 ## Example Images (Repo Root)
 Example Heatmap Output:
